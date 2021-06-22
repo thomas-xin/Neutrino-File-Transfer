@@ -1,7 +1,4 @@
-import os, sys, collections, pickle, zipfile, concurrent.futures, subprocess
-
-from concurrent.futures import thread
-from collections import deque
+import os
 
 
 def copyfileobj(fsrc, fdst, length=1048576, size=None):
@@ -32,6 +29,10 @@ def read_into(out, argv, i, pos, size):
 
 
 if __name__ == "__main__":
+    import sys, collections, pickle, concurrent.futures, subprocess
+    from concurrent.futures import thread
+    from collections import deque
+
     def _adjust_thread_count(self):
         # if idle threads are available, don't spin new threads
         if self._idle_semaphore.acquire(timeout=0):
@@ -107,11 +108,14 @@ if __name__ == "__main__":
             subprocess.run(f"truncate -s {fs} {out}", shell=True)
 
         futs = deque()
+        pfuts = deque()
         indices = sorted(range(len(files)), key=lambda i: info[i + 1][2])
-        for f in map(files.__getitem__, indices[-256:]):
-            futs.append(ppe.submit(write_into, out, f, names[f]))
-        for f in map(files.__getitem__, indices[:-256]):
+        quarter = len(indices) >> 2
+        for f in map(files.__getitem__, reversed(indices[-quarter:])):
+            pfuts.appendleft(ppe.submit(write_into, out, f, names[f]))
+        for f in map(files.__getitem__, indices[:-quarter]):
             futs.append(submit(write_into, out, f, names[f]))
+        futs.extend(pfuts)
         for i, fut in enumerate(futs):
             fut.result()
             sys.stdout.write(f"\r{i}/{len(futs)}")
@@ -152,11 +156,14 @@ if __name__ == "__main__":
         info.popleft()
 
         futs = deque()
+        pfuts = deque()
         tuples = sorted(info, key=lambda t: t[2])
-        for path, pos, size in tuples[-256:]:
-            futs.append(ppe.submit(read_into, out, argv, path, pos, size))
-        for path, pos, size in tuples[:-256]:
+        quarter = len(tuples) >> 2
+        for path, pos, size in reversed(tuples[-quarter:]):
+            pfuts.appendleft(ppe.submit(read_into, out, argv, path, pos, size))
+        for path, pos, size in tuples[:-quarter]:
             futs.append(submit(read_into, out, argv, path, pos, size))
+        futs.extend(pfuts)
         for i, fut in enumerate(futs):
             fut.result()
             sys.stdout.write(f"\r{i}/{len(futs)}")
