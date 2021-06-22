@@ -27,6 +27,16 @@ def read_into(out, argv, i, pos, size):
             fi.seek(pos)
             copyfileobj(fi, fo, size=size)
 
+def filecmp(fsrc, fdst, length=1048576):
+    while True:
+        fut = submit(fsrc.read, length)
+        y = fdst.read(length)
+        x = fut.result()
+        if x != y:
+            return
+        if not x:
+            return True
+
 
 if __name__ == "__main__":
     import sys, collections, pickle, concurrent.futures, subprocess
@@ -73,17 +83,56 @@ if __name__ == "__main__":
         out = ".output"
         info = deque((deque(),))
         names = {}
+        sizes = {}
+        hashes = {}
+        extras = deque()
+
+        hsize = 16384
+
+        def get_hash(path=".", size=0):
+            with open(path, "rb") as f:
+                x = f.read(hsize)
+                if size > hsize:
+                    f.seek(max(hsize, size - hsize))
+                    y = f.read(hsize)
+                else:
+                    y = 0
+            return hash(x) + hash(y) + size
 
         def recursive_scan(path=".", pos=0):
             files = deque()
             for f in os.scandir(path):
                 if f.is_file(follow_symlinks=False):
                     s = f.stat()
-                    if s.st_size:
+                    size = s.st_size
+                    if size:
+                        if size in sizes:
+                            h = get_hash(f.path, size=size)
+                            try:
+                                for f2 in sizes[size]:
+                                    try:
+                                        h2 = hashes[f2]
+                                    except KeyError:
+                                        h2 = hashes[f2] = get_hash(f2, size=size)
+                                    if h == h2:
+                                        with open(f.path, "rb") as fi:
+                                            with open(f2, "rb") as fo:
+                                                if filecmp(fi, fo):
+                                                    extras.append((os.path.relpath(f.path, argv), names[f2], size))
+                                                    raise StopIteration
+                            except StopIteration:
+                                continue
+                            hashes[f.path] = h
                         files.append(f.path)
-                        info.append((os.path.relpath(f.path, argv), pos, s.st_size))
+                        info.append((os.path.relpath(f.path, argv), pos, size))
                         names[f.path] = pos
-                        pos += s.st_size
+                        try:
+                            sizes[size].append(f.path)
+                        except KeyError:
+                            sizes[size] = deque((f.path,))
+                        pos += size
+                    else:
+                        extras.append((os.path.relpath(f.path, argv), 0, 0))
                 elif f.is_dir(follow_symlinks=False):
                     fp = os.path.relpath(f.path, argv)
                     info[0].append(fp)
@@ -93,6 +142,7 @@ if __name__ == "__main__":
             return files, pos
 
         files, pos = recursive_scan(argv)
+        info.extend(extras)
 
         fs = pos
         infodata = pickle.dumps(info)
@@ -160,9 +210,17 @@ if __name__ == "__main__":
         tuples = sorted(info, key=lambda t: t[2])
         quarter = len(tuples) >> 2
         for path, pos, size in reversed(tuples[-quarter:]):
-            pfuts.appendleft(ppe.submit(read_into, out, argv, path, pos, size))
+            if not size:
+                with open(os.path.join(out, argv), "wb") as fo:
+                    pass
+            else:
+                pfuts.appendleft(ppe.submit(read_into, out, argv, path, pos, size))
         for path, pos, size in tuples[:-quarter]:
-            futs.append(submit(read_into, out, argv, path, pos, size))
+            if not size:
+                with open(os.path.join(out, argv), "wb") as fo:
+                    pass
+            else:
+                futs.append(submit(read_into, out, argv, path, pos, size))
         futs.extend(pfuts)
         for i, fut in enumerate(futs):
             fut.result()
