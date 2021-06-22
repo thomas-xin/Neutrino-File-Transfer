@@ -33,7 +33,7 @@ def _adjust_thread_count(self):
 
 concurrent.futures.ThreadPoolExecutor._adjust_thread_count = lambda self: _adjust_thread_count(self)
 
-exc = concurrent.futures.ThreadPoolExecutor(max_workers=512)
+exc = concurrent.futures.ThreadPoolExecutor(max_workers=192)
 submit = exc.submit
 
 def copyfileobj(fsrc, fdst, length=1048576, size=None):
@@ -98,7 +98,7 @@ if argv != ".output":
                 copyfileobj(fi, fo)
 
     futs = deque()
-    for f in files:
+    for f in sorted(files, key=lambda f: names[f]):
         futs.append(submit(write_into, f))
     for i, fut in enumerate(futs):
         fut.result()
@@ -146,7 +146,7 @@ else:
                 copyfileobj(fi, fo, size=size)
 
     futs = deque()
-    for path, pos, size in info:
+    for path, pos, size in sorted(info, key=lambda t: t[2]):
         futs.append(submit(read_into, path, pos, size))
     for i, fut in enumerate(futs):
         fut.result()
