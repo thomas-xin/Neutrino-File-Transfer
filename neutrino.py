@@ -39,7 +39,7 @@ def filecmp(fsrc, fdst, length=1048576):
 
 
 if __name__ == "__main__":
-    import sys, collections, pickle, concurrent.futures, subprocess
+    import sys, collections, pickle, io, zipfile, concurrent.futures, subprocess
     from concurrent.futures import thread
     from collections import deque
 
@@ -146,6 +146,11 @@ if __name__ == "__main__":
 
         fs = pos
         infodata = pickle.dumps(info)
+        b = io.BytesIO()
+        with zipfile.ZipFile(b, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as z:
+            z.writestr("M", infodata)
+        b.seek(0)
+        infodata = b.read()
         infolen = len(infodata).to_bytes(len(infodata).bit_length() + 7 >> 3, "little")
         infodata += b"\x80" * 2 + b"\x80".join(bytes((i,)) for i in infolen)
         fs += len(infodata)
@@ -167,15 +172,18 @@ if __name__ == "__main__":
             futs.append(submit(write_into, out, f, names[f]))
         futs.extend(pfuts)
         for i, fut in enumerate(futs):
-            fut.result()
-            sys.stdout.write(f"\r{i}/{len(futs)}")
+            try:
+                fut.result()
+                sys.stdout.write(f"\r{i}/{len(futs)}")
+            except FileNotFoundError:
+                pass
         sys.stdout.write(f"\r{len(futs)}/{len(futs)}\n")
 
         with open(out, "rb+") as f:
             f.seek(fs - len(infodata))
             f.write(infodata)
 
-        print(f"{fs} bytes written.")
+        print(f"{fs} bytes written; {len(files)} unique files/folders, {len(extras)} duplicate/empty files.")
 
     else:
         out = "output"
@@ -194,7 +202,11 @@ if __name__ == "__main__":
             i -= infolen
             f.seek(i)
             infodata = f.read(infolen)
+        b = io.BytesIO(infodata)
+        with zipfile.ZipFile(b, "r") as z:
+            infodata = z.read("M")
         info = pickle.loads(infodata)
+
         if not os.path.exists(out):
             os.mkdir(out)
         for f in sorted(info[0], key=len):
