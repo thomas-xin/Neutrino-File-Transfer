@@ -39,7 +39,7 @@ def filecmp(fsrc, fdst, length=1048576):
 
 
 if __name__ == "__main__":
-    import sys, collections, pickle, io, zipfile, concurrent.futures, subprocess
+    import sys, time, collections, pickle, io, zipfile, concurrent.futures, subprocess
     from concurrent.futures import thread
     from collections import deque
 
@@ -89,15 +89,23 @@ if __name__ == "__main__":
 
         hsize = 16384
 
+        def _get_hash(path, pos):
+            with open(path, "rb") as f:
+                f.seek(pos)
+                return f.read()
+
         def get_hash(path=".", size=0):
+            if size > hsize:
+                pos = max(hsize, size - hsize)
+                fut = submit(_get_hash, path, pos)
+                y = True
+            else:
+                y = False
             with open(path, "rb") as f:
                 x = f.read(hsize)
-                if size > hsize:
-                    f.seek(max(hsize, size - hsize))
-                    y = f.read(hsize)
-                else:
-                    y = 0
-            return hash(x) + hash(y) + size
+            if y:
+                return hash(x) + hash(fut.result()) + size
+            return hash(x) + size
 
         def recursive_scan(path=".", pos=0):
             files = deque()
@@ -141,7 +149,19 @@ if __name__ == "__main__":
                     pos = pos
             return files, pos
 
-        files, pos = recursive_scan(argv)
+        sys.stdout.write("Scanning...")
+
+        fut = submit(recursive_scan, argv)
+        count = 0
+        while not fut.done():
+            count2 = len(info) - 1 + len(extras)
+            if count < count2:
+                count = count2
+                sys.stdout.write(f"\rScanning ({count})...")
+                time.sleep(0.03)
+        print(f"\rScanned ({len(info) - 1 + len(extras)}).   ")
+
+        files, pos = fut.result()
         info.extend(extras)
 
         fs = pos
@@ -154,6 +174,8 @@ if __name__ == "__main__":
         infolen = len(infodata).to_bytes(len(infodata).bit_length() + 7 >> 3, "little")
         infodata += b"\x80" * 2 + b"\x80".join(bytes((i,)) for i in infolen)
         fs += len(infodata)
+
+        t = time.time()
 
         if os.name == "nt":
             if os.path.exists(out):
@@ -183,12 +205,15 @@ if __name__ == "__main__":
             f.seek(fs - len(infodata))
             f.write(infodata)
 
-        print(f"{fs} bytes written; {len(files)} unique files/folders, {len(extras)} duplicate/empty files.")
+        print(f"{fs} bytes written in {round(time.time() - t, 4)} seconds; {len(files)} unique files/folders, {len(extras)} duplicate/empty files.")
 
     else:
         out = "output"
         fs = os.path.getsize(argv)
         infolen = b""
+
+        sys.stdout.write("Scanning...")
+
         with open(argv, "rb") as f:
             b = c = b""
             for i in range(fs - 1, -1, -1):
@@ -207,6 +232,12 @@ if __name__ == "__main__":
             infodata = z.read("M")
         info = pickle.loads(infodata)
 
+        print(f"\rScanned ({len(info) - 1 + len(info[0])}).   ")
+
+        fs = 0
+        t = time.time()
+        filec = extrac = 0
+
         if not os.path.exists(out):
             os.mkdir(out)
         for f in sorted(info[0], key=len):
@@ -214,7 +245,9 @@ if __name__ == "__main__":
             try:
                 os.mkdir(fn)
             except FileExistsError:
-                pass
+                extrac += 1
+            else:
+                filec += 1
         info.popleft()
 
         futs = deque()
@@ -224,17 +257,23 @@ if __name__ == "__main__":
         for path, pos, size in reversed(tuples[-quarter:]):
             if not size:
                 with open(os.path.join(out, argv), "wb") as fo:
-                    pass
+                    extrac += 1
             else:
                 pfuts.appendleft(ppe.submit(read_into, out, argv, path, pos, size))
+                filec += 1
+                fs += size
         for path, pos, size in tuples[:-quarter]:
             if not size:
                 with open(os.path.join(out, argv), "wb") as fo:
-                    pass
+                    extrac += 1
             else:
                 futs.append(submit(read_into, out, argv, path, pos, size))
+                filec += 1
+                fs += size
         futs.extend(pfuts)
         for i, fut in enumerate(futs):
             fut.result()
             sys.stdout.write(f"\r{i}/{len(futs)}")
         sys.stdout.write(f"\r{len(futs)}/{len(futs)}\n")
+
+        print(f"{fs} bytes written in {round(time.time() - t, 4)} seconds; {filec} valid files/folders, {extrac} empty files.")
