@@ -4,6 +4,7 @@ A multithreaded file transfer program that recursively concatenates a folder of 
 ## Features
 - `python neutrino.py input` will copy the file or folder `input` into a single file named `.output`.
 - `python neutrino.py .output` (Note: currently hardcoded to be the string `".output"`) will extract all files in `.output` and place them in a folder named `output`.
+- Duplicate files are omitted and instead stored as pointers to their copies.
 - The file metadata is stored at the end, and is read in reverse during restoration.
 - Relative paths and their indices in the concatenated file are stored at the end of the output file and will be used to restore them.
 - The file is terminated by a 0x80-separated little endian number representing the size in bytes of the file path object.
