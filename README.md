@@ -1,5 +1,5 @@
 # Neutrino-File-Transfer
-A multithreaded file transfer program that recursively concatenates a folder of files. Intended for fast transfer of databases with thousands of small files, currently implemented to be uncompressed. Originally designed for [Miza](https://github.com/thomas-xin/Miza)'s database.
+A multithreaded file transfer program that recursively concatenates a folder of files. Has no limit on maximum filesize nor number of files (though if there are billions of files it may run out memory, and is obviously bounded by disk space/filesystem limits). Intended for fast transfer of databases with thousands of small files, currently implemented to be uncompressed. Originally designed for [Miza](https://github.com/thomas-xin/Miza)'s database.
 
 ## Features
 - `python neutrino.py input` will copy the file or folder `input` into a single file named `.output`.
