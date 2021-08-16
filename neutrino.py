@@ -77,9 +77,12 @@ if __name__ == "__main__":
     tpe = concurrent.futures.ThreadPoolExecutor(max_workers=192)
     submit = tpe.submit
 
-    argv = " ".join(sys.argv[1:]) or "."
+    argv = " ".join(sys.argv[1:])
 
-    if argv != ".output":
+    while not argv:
+        argv = input("Please enter file or folder to process: ")
+
+    if os.path.isdir(argv):
         out = ".output"
         info = deque((deque(),))
         names = {}
