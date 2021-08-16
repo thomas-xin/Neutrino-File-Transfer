@@ -77,13 +77,13 @@ if __name__ == "__main__":
     tpe = concurrent.futures.ThreadPoolExecutor(max_workers=192)
     submit = tpe.submit
 
-    argv = " ".join(sys.argv[1:])
+    argv = sys.argv[1] if len(sys.argv) > 1 else None
 
     while not argv:
         argv = input("Please enter file or folder to process: ")
 
     if os.path.isdir(argv):
-        out = ".output"
+        out = sys.argv[2] if len(sys.argv) > 2 else ".output"
         info = deque((deque(),))
         names = {}
         sizes = {}
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         print(f"{fs} bytes written in {round(time.time() - t, 4)} seconds; {len(files)} unique files/folders, {len(extras)} duplicate/empty files.")
 
     else:
-        out = "output"
+        out = sys.argv[2] if len(sys.argv) > 2 else "output"
         fs = os.path.getsize(argv)
         infolen = b""
 
