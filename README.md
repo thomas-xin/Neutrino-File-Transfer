@@ -14,4 +14,4 @@ Functions very similarly to `.zip`, `.tar` and `.tar.gz` files, being a file for
 - The file metadata is stored at the end, and is read in reverse during restoration. The first file in the folder 
 - Relative paths and their indices in the concatenated file are stored at the end of the output file and will be used to restore them.
 - The file is terminated by a 0x80-separated little endian number representing the size in bytes of the file path object.
-- Compression is currently done by the program invoking itself a second time, concatenating a folder of zip files.
+- Compression is currently done by the program invoking itself a second time, concatenating a folder of zip files, up to 256MB each.
