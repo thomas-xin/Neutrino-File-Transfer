@@ -122,11 +122,6 @@ if __name__ == "__main__":
 		compress = True
 	else:
 		compress = False
-	if "-v" in sys.argv:
-		sys.argv.remove("-v")
-		verbose = True
-	else:
-		verbose = False
 	if "-d" in sys.argv:
 		sys.argv.remove("-d")
 		decompress = True
