@@ -143,11 +143,17 @@ if __name__ == "__main__":
 	if os.path.isdir(argv):
 		out = sys.argv[2] if len(sys.argv) > 2 else argv.rsplit("/", 1)[-1].rsplit(".", 1)[0] + ".wb" or "output.wb"
 		if os.path.exists(out):
-			out = "~1.".join(out.rsplit(".", 1))
-			while os.path.exists(out):
-				spl = out.rsplit(".", 1)
-				spl2 = spl[0].rsplit("~", 1)
-				out = spl2[0] + "~" + str(int(spl2[1]) + 1) + "." + spl[-1]
+			if "." in out:
+				out = "~1.".join(out.rsplit(".", 1))
+				while os.path.exists(out):
+					spl = out.rsplit(".", 1)
+					spl2 = spl[0].rsplit("~", 1)
+					out = spl2[0] + "~" + str(int(spl2[1]) + 1) + "." + spl[-1]
+			else:
+				out += "~1"
+				while os.path.exists(out):
+					spl = out.rsplit("~", 1)
+					out = spl[0] + "~" + str(int(spl[1]) + 1)
 		info = deque((deque(),))
 		names = {}
 		sizes = {}
