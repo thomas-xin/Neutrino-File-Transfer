@@ -399,11 +399,17 @@ if __name__ == "__main__":
 				f.truncate(fs - 1)
 				f.close()
 				ensure_compressor()
-				print("\nDecompressing...")
+				if not target:
+					print("\nDecompressing...")
 				subprocess.run(("4x4", "d", "-p16", "-i48", argv, argv + ".lz"))
 				with open(argv, "ab") as f:
 					f.write(b"\x80")
-				subprocess.run((sys.executable, this, "-s", str(fs), argv + ".lz", out))
+				args = (sys.executable, this, "-s", str(fs), argv + ".lz")
+				if target:
+					args += ("-f", target)
+				else:
+					args += (out,)
+				subprocess.run(args)
 				os.remove(argv + ".lz")
 				raise SystemExit
 			b = c = b""
