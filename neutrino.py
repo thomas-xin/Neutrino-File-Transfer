@@ -97,10 +97,10 @@ def encrypt(fsrc, fdst, pos, size=None, password="", total=-1, emoji=True):
 		(129303, 129400, 129402),
 	), dtype=np.uint32)
 	rand = np.random.default_rng(h)
-	rand.shuffle(emojis)
-	it = iter(emojis)
-	_encrypt = {ord(c): chr(next(it)) for c in chars}
 	def __encrypt(b):
+		rand.shuffle(emojis)
+		it = iter(emojis)
+		_encrypt = {ord(c): chr(next(it)) for c in chars}
 		a = np.frombuffer(b, dtype=np.uint8)
 		n = np.arange(len(b), dtype=np.uint32)
 		r = rand.integers(0, n, dtype=np.uint32, endpoint=True)
@@ -146,10 +146,10 @@ def decrypt(fsrc, fdst, pos, size=None, password="", total=-1, emoji=True):
 		(129303, 129400, 129402),
 	), dtype=np.uint32)
 	rand = np.random.default_rng(h)
-	rand.shuffle(emojis)
-	it = iter(emojis)
-	_decrypt = {next(it): c for c in chars}
 	def __decrypt(b):
+		rand.shuffle(emojis)
+		it = iter(emojis)
+		_decrypt = {next(it): c for c in chars}
 		s = b.decode("utf-8").translate(_decrypt)
 		b = base64.b85decode(s.encode("ascii"))
 		a = np.frombuffer(b, dtype=np.uint8)
@@ -403,29 +403,30 @@ if __name__ == "__main__":
 			files, pos = fut.result()
 			info.extend(extras)
 
+			fs = fsize = pos
+			if decompress:
+				info.append(None)
+			infodata = pickle.dumps(info)
+			if not compress:
+				b = io.BytesIO()
+				with zipfile.ZipFile(b, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as z:
+					z.writestr("M", infodata)
+				b.seek(0)
+				infodata = b.read()
+			infolen = len(infodata).to_bytes(len(infodata).bit_length() + 7 >> 3, "little")
+			infodata += b"\x80" * 2 + b"\x80".join(bytes((i,)) for i in infolen)
+			fs += len(infodata)
+
 		else:
 			sys.stdout.write(f"\rScanned (1/1) \n")
-			size = os.path.getsize(argv)
+			fsize = os.path.getsize(argv)
 			name = argv.replace("\\", "/").split("/", 1)[-1]
 			pos = 0
 			files = [name]
-			info.append((name, pos, size))
+			info.append((name, pos, fsize))
 			names[name] = pos
-			pos = size
-
-		fs = fsize = pos
-		if decompress:
-			info.append(None)
-		infodata = pickle.dumps(info)
-		if not compress:
-			b = io.BytesIO()
-			with zipfile.ZipFile(b, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as z:
-				z.writestr("M", infodata)
-			b.seek(0)
-			infodata = b.read()
-		infolen = len(infodata).to_bytes(len(infodata).bit_length() + 7 >> 3, "little")
-		infodata += b"\x80" * 2 + b"\x80".join(bytes((i,)) for i in infolen)
-		fs += len(infodata)
+			infodata = b"\x01\x80"
+			fs = fsize + 2
 
 		t = time.time()
 
@@ -483,7 +484,6 @@ if __name__ == "__main__":
 				if not encryptp:
 					ppe.shutdown(wait=True)
 				subprocess.run((sys.executable, this, "-d", ".cache", out + "c"))
-				os.remove(out)
 
 				futs = deque()
 				if os.path.exists(".cache"):
@@ -491,7 +491,12 @@ if __name__ == "__main__":
 						futs.append(submit(os.remove, ".cache/" + n))
 				for fut in futs:
 					fut.result()
-				os.rename(out + "c", out)
+
+				if os.path.getsize(out + "c") < fs:
+					os.remove(out)
+					os.rename(out + "c", out)
+				else:
+					os.remove(out + "c")
 				if not encryptp and os.path.exists(".cache"):
 					os.rmdir(".cache")
 			else:
@@ -510,10 +515,13 @@ if __name__ == "__main__":
 				elif compress >= 5:
 					c = min(12, compress + 3)
 				subprocess.run(("4x4", str(c), "-p16", "-i48", out, out + ".lz"))
-				os.remove(out)
-				os.rename(out + ".lz", out)
-				with open(out, "ab") as f:
-					f.write(b"\x80")
+				if os.path.getsize(out + ".lz") + 2 < fs:
+					os.remove(out)
+					os.rename(out + ".lz", out)
+					with open(out, "ab") as f:
+						f.write(b"\x00\x80")
+				else:
+					os.remove(out + ".lz")
 
 		if encryptp:
 			sys.stdout.write("Encrypting...")
@@ -586,19 +594,21 @@ if __name__ == "__main__":
 				args += (out,)
 			subprocess.run(args)
 			os.remove(i2)
+			os.rmdir(".cache")
 			raise SystemExit
 
 		with open(argv, "rb+") as f:
-			f.seek(fs - 1)
-			if f.read(1) == b"\x80":
+			f.seek(fs - 2)
+			b = f.read(2)
+			if b == b"\x00\x80":
 				ensure_compressor()
-				f.truncate(fs - 1)
+				f.truncate(fs - 2)
 				f.close()
 				if not target:
 					print("\nDecompressing...")
 				subprocess.run(("4x4", "d", "-p16", "-i48", argv, argv + ".lz"))
 				with open(argv, "ab") as f:
-					f.write(b"\x80")
+					f.write(b"\00\x80")
 				args = (sys.executable, this, "-s", str(fs), argv + ".lz")
 				if yes:
 					args += ("-y",)
@@ -609,18 +619,22 @@ if __name__ == "__main__":
 				subprocess.run(args)
 				os.remove(argv + ".lz")
 				raise SystemExit
-			b = c = b""
-			for i in range(fs - 1, -1, -1):
+			if b == b"\x01\x80":
+				infodata = pickle.dumps(deque(((), [out, 0, fs - 2],)))
+				out = "./"
+			else:
+				b = c = b""
+				for i in range(fs - 1, -1, -1):
+					f.seek(i)
+					b = c
+					c = f.read(1)
+					if b == c == b"\x80":
+						break
+					infolen = c + infolen
+				infolen = int.from_bytes(infolen[1::2], "little")
+				i -= infolen
 				f.seek(i)
-				b = c
-				c = f.read(1)
-				if b == c == b"\x80":
-					break
-				infolen = c + infolen
-			infolen = int.from_bytes(infolen[1::2], "little")
-			i -= infolen
-			f.seek(i)
-			infodata = f.read(infolen)
+				infodata = f.read(infolen)
 		if infodata[0] != 128:
 			b = io.BytesIO(infodata)
 			with zipfile.ZipFile(b, "r") as z:
