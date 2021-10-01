@@ -103,12 +103,14 @@ def encrypt(fsrc, fdst, pos, size=None, password="", total=-1, emoji=True):
 		_encrypt = {ord(c): chr(next(it)) for c in chars}
 		a = np.frombuffer(b, dtype=np.uint8)
 		n = np.arange(len(b), dtype=np.uint32)
+		y = rand.integers(0, 256, size=len(b), dtype=np.uint8)
 		r = rand.integers(0, n, dtype=np.uint32, endpoint=True)
 		x = np.empty(len(b), dtype=np.uint8)
 		for i, j in enumerate(r):
 			if i != j:
 				x[i] = x[j]
 			x[j] = a[i]
+		x -= y
 		s = base64.b85encode(x.tobytes()).decode("ascii")
 		return s.translate(_encrypt).encode("utf-8")
 	i = 0
@@ -154,8 +156,9 @@ def decrypt(fsrc, fdst, pos, size=None, password="", total=-1, emoji=True):
 		b = base64.b85decode(s.encode("ascii"))
 		a = np.frombuffer(b, dtype=np.uint8)
 		n = np.arange(len(b), dtype=np.uint32)
+		y = rand.integers(0, 256, size=len(b), dtype=np.uint8)
 		r = rand.integers(0, n, dtype=np.uint32, endpoint=True)
-		x = a.copy()
+		x = a + y
 		for i, j in zip(n[::-1], r[::-1]):
 			x[[i, j]] = x[[j, i]]
 		return x.tobytes()
@@ -566,7 +569,8 @@ if __name__ == "__main__":
 			sys.stdout.write("Scanning...")
 
 		if decryptp:
-			sys.stdout.write("\nDecrypting...")
+			if not target:
+				sys.stdout.write("\nDecrypting...")
 			if os.path.exists(".cache"):
 				for n in os.listdir(".cache"):
 					submit(os.remove, ".cache/" + n)
@@ -583,8 +587,10 @@ if __name__ == "__main__":
 				futs.append(ppe.submit(decrypt, argv, i2, j, 26214400, total=fs // 5, password=decryptp))
 			for i, fut in enumerate(futs):
 				fut.result()
-				sys.stdout.write(f"\rDecrypting ({i}/{len(futs)})")
-			sys.stdout.write(f"\rDecrypted ({len(futs)}/{len(futs)}) \n")
+				if not target:
+					sys.stdout.write(f"\rDecrypting ({i}/{len(futs)})")
+			if not target:
+				sys.stdout.write(f"\rDecrypted ({len(futs)}/{len(futs)}) \n")
 			args = (sys.executable, this, "-s", str(fs), i2)
 			if yes:
 				args += ("-y",)
