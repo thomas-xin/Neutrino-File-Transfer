@@ -634,7 +634,7 @@ if __name__ == "__main__":
 				os.remove(argv + ".lz")
 				raise SystemExit
 			if b == b"\x01\x80":
-				infodata = orjson.dumps(deque(((), [out, 0, fs - 2],)))
+				infodata = orjson.dumps([(), [out, 0, fs - 2]])
 				out = "./"
 			else:
 				b = c = b""
