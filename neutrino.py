@@ -187,10 +187,14 @@ if __name__ == "__main__":
 	from collections import deque
 
 	try:
-		import orjson
+		import orjson as json
 	except ModuleNotFoundError:
 		subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--user", "orjson"])
-		import orjson
+		try:
+			import orjson as json
+		except ModuleNotFoundError:
+			import json
+	as_bytes = lambda s: s.encode("utf-8") if isinstance(s, str) else s
 
 	def _adjust_thread_count(self):
 		# if idle threads are available, don't spin new threads
@@ -417,10 +421,14 @@ if __name__ == "__main__":
 				info.append(None)
 			info[0] = list(info[0])
 			info = list(info)
-			infodata = orjson.dumps(info)
+			infodata = as_bytes(json.dumps(info))
 			if not compress:
 				b = io.BytesIO()
-				with zipfile.ZipFile(b, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as z:
+				try:
+					z = zipfile.ZipFile(b, "w", compression=zipfile.ZIP_LZMA, compresslevel=9, strict_timestamps=False)
+				except:
+					z = zipfile.ZipFile(b, "w", compression=zipfile.ZIP_LZMA, compresslevel=9)
+				with z:
 					z.writestr("M", infodata)
 				b.seek(0)
 				infodata = b.read()
@@ -634,7 +642,7 @@ if __name__ == "__main__":
 				os.remove(argv + ".lz")
 				raise SystemExit
 			if b == b"\x01\x80":
-				infodata = orjson.dumps([(), [out, 0, fs - 2]])
+				infodata = as_bytes(json.dumps([(), [out, 0, fs - 2]]))
 				out = "./"
 			else:
 				b = c = b""
@@ -657,7 +665,7 @@ if __name__ == "__main__":
 			import pickle
 			info = pickle.loads(infodata)
 		else:
-			info = orjson.loads(infodata)
+			info = json.loads(infodata)
 			info = deque(info)
 
 		if not target:
