@@ -77,6 +77,8 @@ def ensure_compressor():
 		b = io.BytesIO(resp.read())
 	with zipfile.ZipFile(b, "r") as z:
 		z.extractall()
+	if os.name != "nt":
+		subprocess.run(("chmod", "777", "4x4"))
 
 def encrypt(fsrc, fdst, pos, size=None, password="", total=-1, emoji=True):
 	import base64, hashlib, itertools
@@ -533,7 +535,7 @@ if __name__ == "__main__":
 					c = 6
 				elif compress >= 5:
 					c = min(12, compress + 3)
-				subprocess.run(("4x4", str(c), "-p16", "-i48", out, out + ".lz"))
+				subprocess.run(("./4x4", str(c), "-p16", "-i48", out, out + ".lz"))
 				if os.path.getsize(out + ".lz") + 2 < fs:
 					os.remove(out)
 					os.rename(out + ".lz", out)
@@ -628,7 +630,7 @@ if __name__ == "__main__":
 				f.close()
 				if not target:
 					print("\nDecompressing...")
-				subprocess.run(("4x4", "d", "-p16", "-i48", argv, argv + ".lz"))
+				subprocess.run(("./4x4", "d", "-p16", "-i48", argv, argv + ".lz"))
 				with open(argv, "ab") as f:
 					f.write(b"\00\x80")
 				args = (sys.executable, this, "-s", str(fs), argv + ".lz")
